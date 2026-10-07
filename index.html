@@ -1,0 +1,1303 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#07111f">
+    <title>VE Interview Copilot</title>
+    <style>
+        :root {
+            --bg: #050914;
+            --panel: rgba(9, 18, 31, 0.78);
+            --panel-strong: rgba(8, 17, 30, 0.94);
+            --line: rgba(148, 163, 184, 0.13);
+            --line-bright: rgba(45, 226, 195, 0.25);
+            --text: #edf7ff;
+            --soft: #9fb0c5;
+            --muted: #6f8298;
+            --accent: #31e2c4;
+            --accent-2: #6ba8ff;
+            --danger: #ff8290;
+            --user: rgba(101, 163, 255, 0.13);
+            --bot: rgba(49, 226, 196, 0.08);
+            --shadow: 0 28px 80px rgba(0, 0, 0, 0.38);
+        }
+
+        * { box-sizing: border-box; }
+        html, body { min-height: 100%; }
+        body {
+            margin: 0;
+            color: var(--text);
+            font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            background:
+                radial-gradient(circle at 15% 15%, rgba(49, 226, 196, .08), transparent 28%),
+                radial-gradient(circle at 88% 18%, rgba(107, 168, 255, .09), transparent 30%),
+                radial-gradient(circle at 65% 88%, rgba(148, 112, 255, .07), transparent 26%),
+                #050914;
+            overflow: hidden;
+        }
+
+        body::before {
+            content: "";
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            background-image:
+                linear-gradient(rgba(255,255,255,.018) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255,255,255,.018) 1px, transparent 1px);
+            background-size: 46px 46px;
+            mask-image: radial-gradient(circle at center, black 18%, transparent 88%);
+            animation: gridFloat 26s linear infinite;
+        }
+
+        .glow {
+            position: fixed;
+            width: 340px;
+            height: 340px;
+            border-radius: 50%;
+            filter: blur(70px);
+            opacity: .18;
+            pointer-events: none;
+            animation: drift 15s ease-in-out infinite alternate;
+        }
+        .glow.one { background: var(--accent); top: -160px; left: -130px; }
+        .glow.two { background: var(--accent-2); right: -150px; bottom: -170px; animation-delay: -6s; }
+
+        .shell {
+            position: relative;
+            z-index: 1;
+            height: 100vh;
+            padding: 16px;
+            display: grid;
+            grid-template-rows: 64px minmax(0, 1fr);
+            gap: 14px;
+        }
+
+        .topbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            padding: 0 16px;
+            border: 1px solid var(--line);
+            border-radius: 18px;
+            background: rgba(7, 15, 27, .72);
+            backdrop-filter: blur(22px);
+            box-shadow: 0 12px 34px rgba(0,0,0,.18);
+        }
+
+        .brand { display: flex; align-items: center; gap: 11px; min-width: 0; }
+        .brand-mark {
+            width: 38px;
+            height: 38px;
+            display: grid;
+            place-items: center;
+            border-radius: 12px;
+            color: #02120f;
+            font-size: 11px;
+            font-weight: 900;
+            letter-spacing: -.03em;
+            background: linear-gradient(135deg, #8af5e0, var(--accent));
+            box-shadow: 0 8px 26px rgba(49,226,196,.18);
+        }
+        .brand-name { font-size: 13px; font-weight: 800; }
+        .brand-sub { margin-top: 2px; color: var(--muted); font-size: 10px; }
+
+        .connection-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 11px;
+            border: 1px solid var(--line);
+            border-radius: 999px;
+            color: var(--soft);
+            font-size: 10px;
+            font-weight: 700;
+            background: rgba(255,255,255,.025);
+        }
+        .connection-dot {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: #8090a5;
+            box-shadow: 0 0 0 0 rgba(49,226,196,0);
+            transition: .25s ease;
+        }
+        .connection-pill.online .connection-dot {
+            background: var(--accent);
+            box-shadow: 0 0 0 5px rgba(49,226,196,.08), 0 0 15px rgba(49,226,196,.55);
+        }
+        .connection-pill.offline .connection-dot { background: var(--danger); }
+
+        .main-layout {
+            min-height: 0;
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) 230px;
+            gap: 14px;
+            transition: grid-template-columns .3s ease;
+        }
+        .main-layout.sidebar-collapsed { grid-template-columns: minmax(0, 1fr) 64px; }
+
+        .chat-panel, .sidebar {
+            min-height: 0;
+            border: 1px solid var(--line);
+            background: linear-gradient(180deg, rgba(11, 21, 37, .82), rgba(6, 13, 24, .88));
+            backdrop-filter: blur(22px);
+            box-shadow: var(--shadow);
+        }
+
+        .chat-panel {
+            border-radius: 24px;
+            overflow: hidden;
+            display: grid;
+            grid-template-rows: 54px minmax(0, 1fr) auto;
+        }
+
+        .chat-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 0 18px;
+            border-bottom: 1px solid var(--line);
+            background: rgba(255,255,255,.016);
+        }
+        .chat-title { display: flex; align-items: center; gap: 9px; font-size: 11px; font-weight: 850; letter-spacing: .08em; text-transform: uppercase; }
+        .chat-title::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 14px rgba(49,226,196,.7); }
+        .chat-hint { color: var(--muted); font-size: 10px; }
+
+        .messages {
+            min-height: 0;
+            overflow-y: auto;
+            padding: 20px 22px 28px;
+            scroll-behavior: smooth;
+        }
+        .messages::-webkit-scrollbar { width: 8px; }
+        .messages::-webkit-scrollbar-thumb { background: rgba(126,145,168,.24); border: 2px solid transparent; background-clip: padding-box; border-radius: 99px; }
+
+        .empty-state {
+            height: 100%;
+            min-height: 280px;
+            display: grid;
+            place-items: center;
+            text-align: center;
+            color: var(--muted);
+        }
+        .empty-orb {
+            width: 72px;
+            height: 72px;
+            margin: 0 auto 18px;
+            border-radius: 50%;
+            border: 1px solid rgba(49,226,196,.18);
+            background: radial-gradient(circle, rgba(49,226,196,.12), rgba(49,226,196,.02) 65%, transparent 70%);
+            position: relative;
+        }
+        .empty-orb::before, .empty-orb::after {
+            content: "";
+            position: absolute;
+            inset: 10px;
+            border-radius: inherit;
+            border: 1px solid rgba(107,168,255,.16);
+            animation: orbitPulse 3.4s ease-in-out infinite;
+        }
+        .empty-orb::after { inset: 22px; animation-delay: -1.7s; }
+        .empty-title { color: #cedae8; font-size: 14px; font-weight: 760; }
+        .empty-copy { max-width: 420px; margin-top: 7px; font-size: 11px; line-height: 1.7; }
+
+        .turn { margin: 0 0 18px; animation: turnIn .28s ease both; }
+        .turn-user { display: flex; justify-content: flex-end; align-items: flex-end; flex-direction: column; }
+        .turn-stack { display: flex; flex-direction: column; min-width: 0; }
+        .turn-user .turn-stack { align-items: flex-end; max-width: min(76%, 800px); }
+        .turn-bot .turn-stack { align-items: flex-start; max-width: min(80%, 840px); }
+        .turn-meta {
+            margin-top: 5px;
+            color: #5f7288;
+            font-size: 8.5px;
+            font-weight: 720;
+            letter-spacing: .025em;
+            font-variant-numeric: tabular-nums;
+        }
+        .bubble {
+            max-width: min(76%, 800px);
+            padding: 12px 14px;
+            border-radius: 16px;
+            font-size: 14px;
+            line-height: 1.6;
+            white-space: pre-wrap;
+            overflow-wrap: anywhere;
+        }
+        .turn-user .bubble { max-width: 100%; }
+        .turn-bot .bubble { max-width: 100%; }
+        .bubble-user {
+            border: 1px solid rgba(107,168,255,.17);
+            border-bottom-right-radius: 5px;
+            background: linear-gradient(135deg, rgba(107,168,255,.14), rgba(107,168,255,.07));
+            color: #eaf3ff;
+        }
+        .turn-bot { display: flex; gap: 10px; align-items: flex-start; }
+        .avatar {
+            width: 30px;
+            height: 30px;
+            flex: 0 0 auto;
+            display: grid;
+            place-items: center;
+            margin-top: 2px;
+            border-radius: 10px;
+            color: #061511;
+            font-size: 9px;
+            font-weight: 900;
+            background: linear-gradient(135deg, #92f6e3, var(--accent));
+        }
+        .bubble-bot {
+            max-width: min(80%, 840px);
+            border: 1px solid rgba(49,226,196,.14);
+            border-top-left-radius: 5px;
+            background: var(--bot);
+            color: #dff9f4;
+        }
+        .bubble-bot.error {
+            border-color: rgba(255,130,144,.20);
+            background: rgba(255,130,144,.07);
+            color: #ffd8dd;
+        }
+        .pending { display: inline-flex; gap: 5px; align-items: center; min-height: 16px; }
+        .pending i { width: 5px; height: 5px; border-radius: 50%; background: #84eada; animation: typing 1s ease-in-out infinite; }
+        .pending i:nth-child(2) { animation-delay: .13s; }
+        .pending i:nth-child(3) { animation-delay: .26s; }
+
+        .composer {
+            padding: 12px 14px 14px;
+            border-top: 1px solid var(--line);
+            background: rgba(5, 12, 22, .72);
+        }
+
+        .mode-picker {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 7px;
+            margin-bottom: 10px;
+        }
+        .mode-btn {
+            min-height: 44px;
+            padding: 7px 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 7px;
+            border-radius: 11px;
+            text-align: center;
+            color: #8396ab;
+            background: rgba(255,255,255,.018);
+        }
+        .mode-btn .mode-dot {
+            width: 7px;
+            height: 7px;
+            flex: 0 0 auto;
+            border-radius: 50%;
+            background: #5b6d82;
+            transition: .2s ease;
+        }
+        .mode-btn.active {
+            color: #dff9f4;
+            border-color: rgba(49,226,196,.24);
+            background: rgba(49,226,196,.055);
+            box-shadow: inset 0 0 0 1px rgba(49,226,196,.035);
+        }
+        .mode-btn.active .mode-dot {
+            background: var(--accent);
+            box-shadow: 0 0 12px rgba(49,226,196,.55);
+        }
+        .mode-btn:disabled { opacity: .55; }
+        .source-note {
+            margin: -2px 2px 9px;
+            color: #5c7087;
+            font-size: 8.5px;
+            line-height: 1.45;
+        }
+
+        .live-strip {
+            min-height: 46px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 9px 11px;
+            margin-bottom: 10px;
+            border: 1px solid var(--line);
+            border-radius: 14px;
+            background: rgba(255,255,255,.018);
+            transition: border-color .25s ease, background .25s ease;
+        }
+        .live-strip.listening {
+            border-color: rgba(49,226,196,.20);
+            background: rgba(49,226,196,.035);
+        }
+
+        .voice-orb {
+            width: 28px;
+            height: 28px;
+            flex: 0 0 auto;
+            border-radius: 50%;
+            display: grid;
+            place-items: center;
+            border: 1px solid rgba(49,226,196,.16);
+            background: radial-gradient(circle, rgba(49,226,196,.14), rgba(49,226,196,.03));
+            transform: scale(var(--voice-scale, 1));
+            box-shadow: 0 0 calc(var(--voice-glow, 0) * 1px) rgba(49,226,196,.36);
+            transition: transform .08s linear, box-shadow .08s linear;
+        }
+        .voice-orb::after { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); opacity: .75; }
+
+        .level-panel {
+            width: 184px;
+            flex: 0 0 184px;
+            padding: 8px 10px 9px;
+            border: 1px solid rgba(126,145,168,.12);
+            border-radius: 11px;
+            background: rgba(2, 9, 17, .34);
+            overflow: hidden;
+        }
+        .level-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            margin-bottom: 7px;
+            color: #61758d;
+            font-size: 7px;
+            font-weight: 900;
+            letter-spacing: .11em;
+            text-transform: uppercase;
+        }
+        .level-value {
+            color: #93a9bf;
+            letter-spacing: 0;
+            font-variant-numeric: tabular-nums;
+        }
+        .bars {
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 3px;
+        }
+        .bar {
+            width: 5px;
+            min-height: 5px;
+            height: var(--bar-height, 5px);
+            border-radius: 999px;
+            background: linear-gradient(to top, rgba(49,226,196,.70), #a6f9ea);
+            opacity: .34;
+            transform: scaleY(1);
+            transform-origin: center;
+            box-shadow: 0 0 0 rgba(49,226,196,0);
+            transition: height .055s linear, opacity .12s ease, box-shadow .12s ease;
+        }
+        .live-strip.listening .level-panel {
+            border-color: rgba(49,226,196,.17);
+            background: linear-gradient(180deg, rgba(49,226,196,.045), rgba(2,9,17,.38));
+        }
+        .live-strip.listening .bar {
+            opacity: .92;
+            box-shadow: 0 0 8px rgba(49,226,196,.16);
+        }
+
+        .live-copy { min-width: 0; flex: 1; }
+        .live-label { color: var(--muted); font-size: 9px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+        .interim-text {
+            min-height: 20px;
+            margin-top: 2px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            color: #b8c7d8;
+            font-size: 12px;
+            font-style: italic;
+        }
+        .interim-text:empty::before { content: "Waiting for speech…"; color: #53667c; font-style: normal; }
+
+        .timing-row {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 7px;
+            margin-bottom: 10px;
+        }
+        .timing-chip {
+            min-width: 0;
+            padding: 7px 10px;
+            border: 1px solid rgba(148,163,184,.09);
+            border-radius: 10px;
+            background: rgba(255,255,255,.018);
+        }
+        .timing-chip span {
+            display: block;
+            color: #5f738a;
+            font-size: 7px;
+            font-weight: 850;
+            letter-spacing: .09em;
+            text-transform: uppercase;
+        }
+        .timing-chip strong {
+            display: block;
+            margin-top: 2px;
+            color: #c5d5e5;
+            font-size: 10px;
+            font-weight: 780;
+            font-variant-numeric: tabular-nums;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .timing-chip.active { border-color: rgba(49,226,196,.14); background: rgba(49,226,196,.025); }
+
+        .actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+        .status-copy { min-width: 0; color: var(--muted); font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .buttons { display: flex; gap: 8px; }
+        button {
+            min-height: 38px;
+            padding: 0 14px;
+            border-radius: 11px;
+            border: 1px solid var(--line);
+            color: #cbd8e6;
+            background: rgba(255,255,255,.035);
+            font: inherit;
+            font-size: 10px;
+            font-weight: 850;
+            cursor: pointer;
+            transition: transform .18s ease, background .18s ease, opacity .18s ease, border-color .18s ease;
+        }
+        button:hover:not(:disabled) { transform: translateY(-1px); background: rgba(255,255,255,.06); }
+        button:disabled { opacity: .42; cursor: not-allowed; }
+        .primary {
+            color: #031410;
+            border-color: rgba(255,255,255,.13);
+            background: linear-gradient(135deg, #80f0db, var(--accent));
+        }
+
+        .sidebar {
+            border-radius: 24px;
+            padding: 12px;
+            overflow: hidden;
+            transition: padding .3s ease;
+        }
+        .side-head { height: 38px; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+        .side-title { font-size: 10px; font-weight: 850; letter-spacing: .09em; text-transform: uppercase; color: #cdd9e6; white-space: nowrap; }
+        .collapse-btn { width: 32px; min-width: 32px; padding: 0; display: grid; place-items: center; }
+        .side-items { display: grid; gap: 9px; margin-top: 8px; }
+        .side-card {
+            display: grid;
+            grid-template-columns: 30px minmax(0, 1fr);
+            gap: 9px;
+            align-items: center;
+            padding: 10px;
+            border: 1px solid rgba(148,163,184,.10);
+            border-radius: 14px;
+            background: rgba(255,255,255,.02);
+        }
+        .side-icon { width: 30px; height: 30px; display: grid; place-items: center; border-radius: 9px; background: rgba(49,226,196,.06); color: #7fe8d5; font-size: 12px; }
+        .side-card strong { display: block; color: #dce7f2; font-size: 10px; }
+        .side-card span { display: block; margin-top: 3px; color: var(--muted); font-size: 9px; line-height: 1.35; }
+        .main-layout.sidebar-collapsed .sidebar { padding: 12px 10px; }
+        .main-layout.sidebar-collapsed .side-title,
+        .main-layout.sidebar-collapsed .side-copy { display: none; }
+        .main-layout.sidebar-collapsed .side-card { grid-template-columns: 30px; padding: 8px 6px; justify-content: center; }
+        .main-layout.sidebar-collapsed .side-head { justify-content: center; }
+
+        @keyframes gridFloat { to { transform: translateY(46px); } }
+        @keyframes drift { from { transform: translate3d(0,0,0) scale(.9); } to { transform: translate3d(80px,70px,0) scale(1.08); } }
+        @keyframes orbitPulse { 0%,100% { transform: scale(.82); opacity: .35; } 50% { transform: scale(1.12); opacity: .85; } }
+        @keyframes turnIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes typing { 0%,100% { transform: translateY(0); opacity: .35; } 50% { transform: translateY(-4px); opacity: 1; } }
+
+        @media (max-width: 900px) {
+            .main-layout { grid-template-columns: minmax(0, 1fr) 64px; }
+            .side-title, .side-copy { display: none; }
+            .side-card { grid-template-columns: 30px; padding: 8px 6px; justify-content: center; }
+            .side-head { justify-content: center; }
+            .bubble { max-width: 88%; }
+        }
+
+        @media (max-width: 640px) {
+            .level-panel { width: 142px; flex-basis: 142px; padding-inline: 7px; }
+            .bars { gap: 2px; }
+            .bar { width: 4px; }
+            .level-head span:first-child { display: none; }
+            .timing-row { grid-template-columns: 1fr; }
+            .level-head { justify-content: flex-end; }
+            body { overflow: auto; }
+            .shell { min-height: 100vh; height: auto; padding: 8px; grid-template-rows: 58px minmax(0, 1fr); }
+            .main-layout { grid-template-columns: 1fr; min-height: calc(100vh - 82px); }
+            .sidebar { display: none; }
+            .chat-panel { min-height: calc(100vh - 82px); border-radius: 18px; }
+            .messages { padding: 16px 12px 24px; }
+            .bubble, .bubble-bot { max-width: 92%; }
+            .connection-pill span:last-child { display: none; }
+            .actions { align-items: flex-end; }
+            .status-copy { white-space: normal; }
+        }
+
+        @media (max-width: 620px) {
+            .mode-picker { grid-template-columns: 1fr; }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; }
+        }
+    </style>
+</head>
+<body>
+    <div class="glow one"></div>
+    <div class="glow two"></div>
+
+    <div class="shell">
+        <header class="topbar">
+            <div class="brand">
+                <div class="brand-mark">VE</div>
+                <div>
+                    <div class="brand-name">Interview Copilot</div>
+                    <div class="brand-sub">Live technical meeting assistant</div>
+                </div>
+            </div>
+
+            <div id="connectionPill" class="connection-pill offline">
+                <span class="connection-dot"></span>
+                <span id="connectionText">Connecting…</span>
+            </div>
+        </header>
+
+        <main id="mainLayout" class="main-layout">
+            <section class="chat-panel">
+                <div class="chat-head">
+                    <div class="chat-title">Live conversation</div>
+                    <div class="chat-hint">Final speech becomes a new chat turn</div>
+                </div>
+
+                <div id="messages" class="messages">
+                    <div id="emptyState" class="empty-state">
+                        <div>
+                            <div class="empty-orb"></div>
+                            <div class="empty-title">Ready for the meeting</div>
+                            <div class="empty-copy">Choose Client Audio, My Mic, or Both. Unfinished speech stays in the listening strip; only finalized speech becomes a chat turn.</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="composer">
+                    <div class="mode-picker" aria-label="Audio capture mode">
+                        <button class="mode-btn active" data-mode="computer" type="button">
+                            <span class="mode-dot"></span><span>Client Audio</span>
+                        </button>
+                        <button class="mode-btn" data-mode="mic" type="button">
+                            <span class="mode-dot"></span><span>My Mic</span>
+                        </button>
+                        <button class="mode-btn" data-mode="both" type="button">
+                            <span class="mode-dot"></span><span>Both</span>
+                        </button>
+                    </div>
+                    <div id="sourceNote" class="source-note">Client Audio: choose the meeting tab/window/screen and make sure audio sharing is enabled.</div>
+
+                    <div id="liveStrip" class="live-strip">
+                        <div id="voiceOrb" class="voice-orb"></div>
+                        <div class="level-panel" aria-label="Live microphone loudness">
+                            <div class="level-head">
+                                <span id="meterSourceLabel">Client audio activity</span>
+                                <span id="meterLevel" class="level-value">0%</span>
+                            </div>
+                            <div class="bars" aria-hidden="true">
+                                <span class="bar"></span><span class="bar"></span><span class="bar"></span><span class="bar"></span>
+                                <span class="bar"></span><span class="bar"></span><span class="bar"></span><span class="bar"></span>
+                                <span class="bar"></span><span class="bar"></span><span class="bar"></span><span class="bar"></span>
+                                <span class="bar"></span><span class="bar"></span><span class="bar"></span><span class="bar"></span>
+                            </div>
+                        </div>
+                        <div class="live-copy">
+                            <div id="liveLabel" class="live-label">Client audio idle</div>
+                            <div id="interimText" class="interim-text"></div>
+                        </div>
+                    </div>
+
+                    <div class="timing-row" aria-label="Live timing metrics">
+                        <div id="listenTimingChip" class="timing-chip">
+                            <span>Listened for</span>
+                            <strong id="listenTimer">00:00.0</strong>
+                        </div>
+                        <div class="timing-chip">
+                            <span>Speech → text</span>
+                            <strong id="sttLatency">—</strong>
+                        </div>
+                        <div class="timing-chip">
+                            <span>AI response</span>
+                            <strong id="aiLatency">—</strong>
+                        </div>
+                    </div>
+
+                    <div class="actions">
+                        <div id="statusCopy" class="status-copy">Choose an audio mode, then press Start Meeting.</div>
+                        <div class="buttons">
+                            <button id="stopBtn" onclick="stopListening()" disabled>Stop</button>
+                            <button id="startBtn" class="primary" onclick="startListening()">Start Meeting</button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <aside class="sidebar">
+                <div class="side-head">
+                    <div class="side-title">Session</div>
+                    <button id="collapseBtn" class="collapse-btn" onclick="toggleSidebar()" title="Collapse session panel">‹</button>
+                </div>
+                <div class="side-items">
+                    <div class="side-card" title="Speech capture">
+                        <div class="side-icon">◉</div>
+                        <div class="side-copy"><strong>3 audio modes</strong><span>Client audio, microphone practice, or a mixed Both mode.</span></div>
+                    </div>
+                    <div class="side-card" title="Context memory">
+                        <div class="side-icon">⌁</div>
+                        <div class="side-copy"><strong>Context memory</strong><span>Turns are processed in order so context stays coherent.</span></div>
+                    </div>
+                    <div class="side-card" title="Diagnostics">
+                        <div class="side-icon">⚙</div>
+                        <div class="side-copy"><strong>Diagnostics</strong><span>API failures are classified in the Python terminal.</span></div>
+                    </div>
+                </div>
+            </aside>
+        </main>
+    </div>
+
+    <script>
+        const messages = document.getElementById("messages");
+        const emptyState = document.getElementById("emptyState");
+        const interimText = document.getElementById("interimText");
+        const liveStrip = document.getElementById("liveStrip");
+        const liveLabel = document.getElementById("liveLabel");
+        const statusCopy = document.getElementById("statusCopy");
+        const connectionPill = document.getElementById("connectionPill");
+        const connectionText = document.getElementById("connectionText");
+        const startBtn = document.getElementById("startBtn");
+        const stopBtn = document.getElementById("stopBtn");
+        const mainLayout = document.getElementById("mainLayout");
+        const collapseBtn = document.getElementById("collapseBtn");
+        const voiceOrb = document.getElementById("voiceOrb");
+        const bars = [...document.querySelectorAll(".bar")];
+        const meterLevel = document.getElementById("meterLevel");
+        const meterSourceLabel = document.getElementById("meterSourceLabel");
+        const listenTimer = document.getElementById("listenTimer");
+        const sttLatency = document.getElementById("sttLatency");
+        const aiLatency = document.getElementById("aiLatency");
+        const listenTimingChip = document.getElementById("listenTimingChip");
+        const modeButtons = [...document.querySelectorAll("[data-mode]")];
+        const sourceNote = document.getElementById("sourceNote");
+
+        let ws = null;
+        let recognition = null;
+        let shouldListen = false;
+        let selectedMode = "computer";
+        let activeRecognitionTrack = null;
+        let micStream = null;
+        let displayStream = null;
+        let mixedStream = null;
+        let mixAudioContext = null;
+        let meterAudioContext = null;
+        let analyser = null;
+        let animationId = null;
+        let recognitionRestartTimer = null;
+        let utteranceCounter = 0;
+        let reconnectTimer = null;
+        let listenStartedAt = null;
+        let listenTimerId = null;
+        let lastSpeechActivityAt = null;
+        let lastInterimAt = null;
+        const requestStartedAt = new Map();
+
+        const MODE_INFO = {
+            computer: {
+                label: "Client Audio",
+                idle: "Client audio idle",
+                listening: "Listening to client audio",
+                meter: "Client audio activity",
+                note: "Client Audio: choose the meeting tab/window/screen and make sure audio sharing is enabled.",
+                start: "Start Client Audio"
+            },
+            mic: {
+                label: "My Mic",
+                idle: "Microphone idle",
+                listening: "Listening to my microphone",
+                meter: "Microphone activity",
+                note: "My Mic: practice mode. Speech from your microphone becomes chat turns and triggers the assistant.",
+                start: "Start My Mic"
+            },
+            both: {
+                label: "Both",
+                idle: "Audio sources idle",
+                listening: "Listening to client audio + microphone",
+                meter: "Mixed audio activity",
+                note: "Both: computer audio and microphone are mixed in the browser. Browser speech recognition cannot reliably separate the two speakers in this mode.",
+                start: "Start Both"
+            }
+        };
+
+        function wsUrl() {
+            const scheme = location.protocol === "https:" ? "wss" : "ws";
+            return `${scheme}://${location.host}/ws`;
+        }
+
+        function setConnection(state, text) {
+            connectionPill.classList.remove("online", "offline");
+            connectionPill.classList.add(state);
+            connectionText.textContent = text;
+        }
+
+        function formatDuration(ms) {
+            if (!Number.isFinite(ms) || ms < 0) return "—";
+            if (ms < 1000) return `${Math.round(ms)} ms`;
+            return `${(ms / 1000).toFixed(ms < 10000 ? 2 : 1)} s`;
+        }
+
+        function formatSession(ms) {
+            const totalTenths = Math.max(0, Math.floor(ms / 100));
+            const minutes = Math.floor(totalTenths / 600);
+            const seconds = Math.floor((totalTenths % 600) / 10);
+            const tenths = totalTenths % 10;
+            return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}.${tenths}`;
+        }
+
+        function modeSourceText(mode = selectedMode) {
+            return mode === "computer" ? "Client audio" : mode === "mic" ? "Microphone" : "Both (mixed)";
+        }
+
+        function selectMode(mode) {
+            if (shouldListen || !MODE_INFO[mode]) return;
+            selectedMode = mode;
+            modeButtons.forEach(btn => {
+                const active = btn.dataset.mode === mode;
+                btn.classList.toggle("active", active);
+                btn.setAttribute("aria-pressed", String(active));
+            });
+            const info = MODE_INFO[mode];
+            sourceNote.textContent = info.note;
+            liveLabel.textContent = info.idle;
+            meterSourceLabel.textContent = info.meter;
+            startBtn.textContent = info.start;
+            statusCopy.textContent = mode === "computer"
+                ? "Client Audio is selected. Start Meeting will ask what meeting audio to share."
+                : mode === "mic"
+                    ? "My Mic is selected for practice or local speech."
+                    : "Both is selected. Client audio and microphone will be mixed for transcription.";
+        }
+
+        modeButtons.forEach(btn => btn.addEventListener("click", () => selectMode(btn.dataset.mode)));
+
+        function setModeButtonsDisabled(disabled) {
+            modeButtons.forEach(btn => btn.disabled = disabled);
+        }
+
+        function startListenTimer() {
+            stopListenTimer(false);
+            listenStartedAt = performance.now();
+            listenTimer.textContent = "00:00.0";
+            listenTimingChip.classList.add("active");
+            listenTimerId = setInterval(() => {
+                if (listenStartedAt !== null) {
+                    listenTimer.textContent = formatSession(performance.now() - listenStartedAt);
+                }
+            }, 100);
+        }
+
+        function stopListenTimer(reset = false) {
+            if (listenTimerId) clearInterval(listenTimerId);
+            listenTimerId = null;
+            if (listenStartedAt !== null && !reset) {
+                listenTimer.textContent = formatSession(performance.now() - listenStartedAt);
+            }
+            if (reset) listenTimer.textContent = "00:00.0";
+            listenTimingChip.classList.remove("active");
+            listenStartedAt = null;
+        }
+
+        function connectWebSocket() {
+            if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return;
+
+            setConnection("offline", "Connecting…");
+            ws = new WebSocket(wsUrl());
+
+            ws.onopen = () => {
+                setConnection("online", "Backend connected");
+                statusCopy.textContent = shouldListen ? `${MODE_INFO[selectedMode].listening}.` : "Backend connected. Ready to start.";
+            };
+
+            ws.onclose = () => {
+                setConnection("offline", "Backend disconnected");
+                if (shouldListen) statusCopy.textContent = "Backend disconnected. Reconnecting…";
+                clearTimeout(reconnectTimer);
+                reconnectTimer = setTimeout(connectWebSocket, 1800);
+            };
+
+            ws.onerror = () => setConnection("offline", "Socket error");
+
+            ws.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                if (data.type !== "bot_response") return;
+
+                const id = String(data.id || "");
+                const target = document.querySelector(`[data-bot-for="${CSS.escape(id)}"]`);
+                if (!target) return;
+
+                target.classList.toggle("error", data.ok === false);
+                target.textContent = data.text || "No response text returned.";
+
+                const generationMs = Number(data.generation_ms);
+                const queueWaitMs = Number(data.queue_wait_ms);
+                const sentAt = requestStartedAt.get(id);
+                const totalMs = Number.isFinite(sentAt) ? performance.now() - sentAt : NaN;
+                requestStartedAt.delete(id);
+
+                if (Number.isFinite(generationMs)) aiLatency.textContent = formatDuration(generationMs);
+
+                const meta = document.querySelector(`[data-bot-meta-for="${CSS.escape(id)}"]`);
+                if (meta) {
+                    const bits = [];
+                    if (Number.isFinite(generationMs)) bits.push(`AI ${formatDuration(generationMs)}`);
+                    if (Number.isFinite(queueWaitMs) && queueWaitMs >= 1) bits.push(`queue ${formatDuration(queueWaitMs)}`);
+                    if (Number.isFinite(totalMs)) bits.push(`total ${formatDuration(totalMs)}`);
+                    meta.textContent = bits.join(" · ");
+                }
+
+                if (data.request_id) target.title = `Request ID: ${data.request_id}`;
+                scrollToBottom();
+            };
+        }
+
+        function scrollToBottom() {
+            requestAnimationFrame(() => { messages.scrollTop = messages.scrollHeight; });
+        }
+
+        function hideEmptyState() {
+            if (emptyState) emptyState.style.display = "none";
+        }
+
+        function createTurn(text, speechToTextMs = null, sourceMode = selectedMode) {
+            hideEmptyState();
+            const id = `u-${Date.now()}-${++utteranceCounter}`;
+
+            const userTurn = document.createElement("div");
+            userTurn.className = "turn turn-user";
+            const userStack = document.createElement("div");
+            userStack.className = "turn-stack";
+            const userBubble = document.createElement("div");
+            userBubble.className = "bubble bubble-user";
+            userBubble.textContent = text;
+            const userMeta = document.createElement("div");
+            userMeta.className = "turn-meta";
+            const source = modeSourceText(sourceMode);
+            userMeta.textContent = Number.isFinite(speechToTextMs)
+                ? `${source} · speech → text ~${formatDuration(speechToTextMs)}`
+                : `${source} · speech finalized`;
+            userStack.append(userBubble, userMeta);
+            userTurn.appendChild(userStack);
+            messages.appendChild(userTurn);
+
+            const botTurn = document.createElement("div");
+            botTurn.className = "turn turn-bot";
+            const avatar = document.createElement("div");
+            avatar.className = "avatar";
+            avatar.textContent = "AI";
+            const botStack = document.createElement("div");
+            botStack.className = "turn-stack";
+            const botBubble = document.createElement("div");
+            botBubble.className = "bubble bubble-bot";
+            botBubble.dataset.botFor = id;
+            botBubble.innerHTML = '<span class="pending"><i></i><i></i><i></i></span>';
+            const botMeta = document.createElement("div");
+            botMeta.className = "turn-meta";
+            botMeta.dataset.botMetaFor = id;
+            botMeta.textContent = "Generating…";
+            botStack.append(botBubble, botMeta);
+            botTurn.append(avatar, botStack);
+            messages.appendChild(botTurn);
+
+            scrollToBottom();
+
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                botBubble.classList.add("error");
+                botBubble.textContent = "Backend WebSocket is disconnected. Reconnecting…";
+                botMeta.textContent = "not sent";
+                connectWebSocket();
+                return;
+            }
+
+            requestStartedAt.set(id, performance.now());
+            ws.send(JSON.stringify({
+                type: "transcript",
+                id,
+                text,
+                source_mode: sourceMode,
+                speech_to_text_ms: Number.isFinite(speechToTextMs) ? Math.round(speechToTextMs) : null
+            }));
+        }
+
+        function setupRecognition() {
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            if (!SpeechRecognition) {
+                statusCopy.textContent = "Speech recognition is not supported in this browser. Use a recent desktop Chrome or Edge.";
+                startBtn.disabled = true;
+                return;
+            }
+
+            recognition = new SpeechRecognition();
+            recognition.continuous = true;
+            recognition.interimResults = true;
+            recognition.lang = "en-US";
+
+            recognition.onstart = () => {
+                liveStrip.classList.add("listening");
+                liveLabel.textContent = MODE_INFO[selectedMode].listening;
+                statusCopy.textContent = selectedMode === "both"
+                    ? "Listening to both sources. Any finalized speech can trigger the assistant in mixed mode."
+                    : `${MODE_INFO[selectedMode].listening}. Voice activity and timing are being measured.`;
+            };
+
+            recognition.onresult = (event) => {
+                let currentInterim = "";
+
+                for (let i = event.resultIndex; i < event.results.length; i++) {
+                    const text = event.results[i][0].transcript.trim();
+                    if (!text) continue;
+
+                    const now = performance.now();
+                    if (event.results[i].isFinal) {
+                        const reference = lastSpeechActivityAt ?? lastInterimAt;
+                        const latencyMs = Number.isFinite(reference) ? Math.max(0, now - reference) : null;
+                        if (Number.isFinite(latencyMs)) sttLatency.textContent = `~${formatDuration(latencyMs)}`;
+                        createTurn(text, latencyMs, selectedMode);
+                        lastInterimAt = null;
+                        lastSpeechActivityAt = null;
+                    } else {
+                        currentInterim += (currentInterim ? " " : "") + text;
+                        lastInterimAt = now;
+                    }
+                }
+
+                interimText.textContent = currentInterim;
+            };
+
+            recognition.onerror = (event) => {
+                if (!shouldListen && event.error === "aborted") return;
+                const friendly = {
+                    "not-allowed": "Speech recognition permission was denied.",
+                    "audio-capture": "The selected audio source is unavailable.",
+                    "network": "Browser speech recognition reported a network error.",
+                    "no-speech": "No speech detected; still waiting…",
+                    "aborted": "Speech recognition was interrupted; restarting…"
+                }[event.error] || `Speech recognition error: ${event.error}`;
+
+                statusCopy.textContent = friendly;
+                if (event.error === "not-allowed" || event.error === "audio-capture") {
+                    shouldListen = false;
+                    resetListeningUi();
+                    stopAudioSources();
+                }
+            };
+
+            recognition.onend = () => {
+                if (shouldListen && activeRecognitionTrack && activeRecognitionTrack.readyState === "live") {
+                    clearTimeout(recognitionRestartTimer);
+                    recognitionRestartTimer = setTimeout(() => startRecognitionFromActiveTrack(), 220);
+                } else {
+                    liveStrip.classList.remove("listening");
+                }
+            };
+        }
+
+        function startRecognitionFromActiveTrack() {
+            if (!recognition || !activeRecognitionTrack || !shouldListen) return;
+            try {
+                recognition.start(activeRecognitionTrack);
+            } catch (err) {
+                // Older Chromium can recognize only its default microphone and
+                // cannot accept a MediaStreamTrack. Mic mode can safely fall back.
+                if (selectedMode === "mic") {
+                    try {
+                        recognition.start();
+                        return;
+                    } catch (_) {}
+                }
+                console.error("SpeechRecognition.start(audioTrack) failed", err);
+                shouldListen = false;
+                statusCopy.textContent = "This browser cannot transcribe the selected audio track. Use desktop Chrome/Edge 135+ for Client Audio/Both modes.";
+                resetListeningUi();
+                stopAudioSources();
+            }
+        }
+
+        async function acquireMicStream() {
+            return navigator.mediaDevices.getUserMedia({
+                audio: {
+                    echoCancellation: true,
+                    noiseSuppression: true,
+                    autoGainControl: true
+                }
+            });
+        }
+
+        async function acquireDisplayAudio() {
+            const stream = await navigator.mediaDevices.getDisplayMedia({
+                video: true,
+                audio: {
+                    echoCancellation: false,
+                    noiseSuppression: false,
+                    autoGainControl: false
+                },
+                systemAudio: "include",
+                windowAudio: "system",
+                selfBrowserSurface: "exclude",
+                surfaceSwitching: "include"
+            });
+
+            const audioTrack = stream.getAudioTracks()[0];
+            if (!audioTrack) {
+                stream.getTracks().forEach(track => track.stop());
+                const err = new Error("No shared audio track was returned. Enable Share audio/System audio in the browser picker.");
+                err.code = "NO_SHARED_AUDIO";
+                throw err;
+            }
+
+            audioTrack.addEventListener("ended", () => {
+                if (shouldListen && (selectedMode === "computer" || selectedMode === "both")) {
+                    statusCopy.textContent = "Client audio sharing ended. Start the meeting again to choose an audio source.";
+                    stopListening({ preserveStatus: true });
+                }
+            }, { once: true });
+
+            return stream;
+        }
+
+        async function buildMixedStream(systemStream, localMicStream) {
+            mixAudioContext = new (window.AudioContext || window.webkitAudioContext)();
+            if (mixAudioContext.state === "suspended") await mixAudioContext.resume();
+
+            const destination = mixAudioContext.createMediaStreamDestination();
+            const systemSource = mixAudioContext.createMediaStreamSource(new MediaStream(systemStream.getAudioTracks()));
+            const micSource = mixAudioContext.createMediaStreamSource(new MediaStream(localMicStream.getAudioTracks()));
+            const systemGain = mixAudioContext.createGain();
+            const micGain = mixAudioContext.createGain();
+            systemGain.gain.value = 1.0;
+            micGain.gain.value = 0.90;
+            systemSource.connect(systemGain).connect(destination);
+            micSource.connect(micGain).connect(destination);
+            return destination.stream;
+        }
+
+        async function acquireAudioForSelectedMode() {
+            if (selectedMode === "mic") {
+                micStream = await acquireMicStream();
+                return micStream;
+            }
+
+            displayStream = await acquireDisplayAudio();
+            if (selectedMode === "computer") return displayStream;
+
+            try {
+                micStream = await acquireMicStream();
+                mixedStream = await buildMixedStream(displayStream, micStream);
+                return mixedStream;
+            } catch (err) {
+                if (displayStream) displayStream.getTracks().forEach(track => track.stop());
+                displayStream = null;
+                throw err;
+            }
+        }
+
+        async function startListening() {
+            if (!recognition || shouldListen) return;
+
+            startBtn.disabled = true;
+            stopBtn.disabled = false;
+            setModeButtonsDisabled(true);
+            interimText.textContent = "";
+            sttLatency.textContent = "—";
+            aiLatency.textContent = "—";
+            lastSpeechActivityAt = null;
+            lastInterimAt = null;
+            connectWebSocket();
+
+            try {
+                const recognitionStream = await acquireAudioForSelectedMode();
+                const track = recognitionStream.getAudioTracks()[0];
+                if (!track) throw new Error("The selected source did not provide an audio track.");
+
+                activeRecognitionTrack = track;
+                shouldListen = true;
+                await startReactiveMeter(recognitionStream);
+                startListenTimer();
+                startRecognitionFromActiveTrack();
+            } catch (err) {
+                console.error("Audio capture start failed", err);
+                shouldListen = false;
+                const noAudio = err && (err.code === "NO_SHARED_AUDIO" || String(err.message || "").includes("No shared audio"));
+                if (noAudio) {
+                    statusCopy.textContent = "No client audio was shared. Start again and enable Share audio/System audio in the browser picker.";
+                } else if (err && err.name === "NotAllowedError") {
+                    statusCopy.textContent = selectedMode === "mic"
+                        ? "Microphone permission was denied."
+                        : "Screen/audio sharing was cancelled or denied.";
+                } else {
+                    statusCopy.textContent = `Could not start ${MODE_INFO[selectedMode].label}: ${err?.message || err}`;
+                }
+                resetListeningUi();
+                stopAudioSources();
+            }
+        }
+
+        function resetListeningUi() {
+            startBtn.disabled = false;
+            stopBtn.disabled = true;
+            setModeButtonsDisabled(false);
+            liveStrip.classList.remove("listening");
+            liveLabel.textContent = MODE_INFO[selectedMode].idle;
+            meterSourceLabel.textContent = MODE_INFO[selectedMode].meter;
+            interimText.textContent = "";
+            stopListenTimer(false);
+            stopReactiveMeter();
+        }
+
+        function stopListening(options = {}) {
+            const preserveStatus = Boolean(options.preserveStatus);
+            shouldListen = false;
+            clearTimeout(recognitionRestartTimer);
+            recognitionRestartTimer = null;
+            if (recognition) {
+                try { recognition.stop(); } catch (_) {}
+            }
+            activeRecognitionTrack = null;
+            resetListeningUi();
+            stopAudioSources();
+            if (!preserveStatus) {
+                statusCopy.textContent = "Meeting capture stopped. Existing conversation and timing metrics remain on screen.";
+            }
+        }
+
+        function stopAudioSources() {
+            const streams = [micStream, displayStream, mixedStream].filter(Boolean);
+            const seen = new Set();
+            streams.forEach(stream => stream.getTracks().forEach(track => {
+                if (!seen.has(track.id)) {
+                    seen.add(track.id);
+                    try { track.stop(); } catch (_) {}
+                }
+            }));
+            micStream = null;
+            displayStream = null;
+            mixedStream = null;
+
+            if (mixAudioContext && mixAudioContext.state !== "closed") {
+                mixAudioContext.close().catch(() => {});
+            }
+            mixAudioContext = null;
+        }
+
+        async function startReactiveMeter(stream) {
+            stopReactiveMeter();
+            meterAudioContext = new (window.AudioContext || window.webkitAudioContext)();
+            if (meterAudioContext.state === "suspended") await meterAudioContext.resume();
+
+            analyser = meterAudioContext.createAnalyser();
+            analyser.fftSize = 256;
+            analyser.smoothingTimeConstant = .55;
+            const source = meterAudioContext.createMediaStreamSource(new MediaStream(stream.getAudioTracks()));
+            source.connect(analyser);
+
+            const timeData = new Uint8Array(analyser.fftSize);
+            const frequencyData = new Uint8Array(analyser.frequencyBinCount);
+            let displayedLevel = 0;
+            let noiseFloor = .008;
+            let frame = 0;
+
+            function animate() {
+                animationId = requestAnimationFrame(animate);
+                frame += 1;
+                analyser.getByteTimeDomainData(timeData);
+                analyser.getByteFrequencyData(frequencyData);
+
+                let squareSum = 0;
+                let peak = 0;
+                for (let i = 0; i < timeData.length; i++) {
+                    const centered = Math.abs((timeData[i] - 128) / 128);
+                    squareSum += centered * centered;
+                    if (centered > peak) peak = centered;
+                }
+
+                const rms = Math.sqrt(squareSum / timeData.length);
+                if (rms < noiseFloor * 1.8 || noiseFloor < .004) {
+                    noiseFloor = noiseFloor * .985 + rms * .015;
+                }
+
+                const rmsSignal = Math.max(0, rms - noiseFloor * .92);
+                const peakSignal = Math.max(0, peak - noiseFloor * 1.2);
+                const rawLevel = Math.min(1, Math.max(rmsSignal * 18, peakSignal * 3.2));
+                const attack = rawLevel > displayedLevel ? .50 : .16;
+                displayedLevel += (rawLevel - displayedLevel) * attack;
+                if (displayedLevel < .012) displayedLevel = 0;
+                const level = Math.max(0, Math.min(1, displayedLevel));
+
+                if (level > .055) lastSpeechActivityAt = performance.now();
+
+                voiceOrb.style.setProperty("--voice-scale", (1 + level * .32).toFixed(3));
+                voiceOrb.style.setProperty("--voice-glow", Math.round(8 + level * 36));
+                meterLevel.textContent = `${Math.round(level * 100)}%`;
+
+                bars.forEach((bar, index) => {
+                    const start = Math.floor((index / bars.length) * frequencyData.length * .82);
+                    const end = Math.max(start + 1, Math.floor(((index + 1) / bars.length) * frequencyData.length * .82));
+                    let bandTotal = 0;
+                    for (let i = start; i < end; i++) bandTotal += frequencyData[i];
+                    const band = (bandTotal / (end - start)) / 255;
+                    const shape = .62 + .38 * Math.sin((index + 1) * 1.45 + frame * .12) ** 2;
+                    const activity = Math.min(1, level * (.82 + band * 1.25) * shape);
+                    const height = level > 0 ? 6 + activity * 26 : 5;
+                    bar.style.setProperty("--bar-height", `${height.toFixed(1)}px`);
+                    bar.style.opacity = String(level > .03 ? Math.min(.98, .48 + activity * .52) : .34);
+                });
+            }
+
+            animate();
+        }
+
+        function stopReactiveMeter() {
+            if (animationId) cancelAnimationFrame(animationId);
+            animationId = null;
+            if (meterAudioContext && meterAudioContext.state !== "closed") {
+                meterAudioContext.close().catch(() => {});
+            }
+            meterAudioContext = null;
+            analyser = null;
+
+            voiceOrb.style.setProperty("--voice-scale", "1");
+            voiceOrb.style.setProperty("--voice-glow", "0");
+            meterLevel.textContent = "0%";
+            bars.forEach(bar => {
+                bar.style.setProperty("--bar-height", "5px");
+                bar.style.opacity = ".34";
+            });
+        }
+
+        function toggleSidebar() {
+            mainLayout.classList.toggle("sidebar-collapsed");
+            const collapsed = mainLayout.classList.contains("sidebar-collapsed");
+            collapseBtn.textContent = collapsed ? "›" : "‹";
+            collapseBtn.title = collapsed ? "Expand session panel" : "Collapse session panel";
+        }
+
+        window.addEventListener("beforeunload", () => {
+            shouldListen = false;
+            clearTimeout(recognitionRestartTimer);
+            stopListenTimer(false);
+            stopReactiveMeter();
+            stopAudioSources();
+            if (ws) ws.close();
+        });
+
+        connectWebSocket();
+        setupRecognition();
+        selectMode("computer");
+    </script>
+</body>
+</html>
