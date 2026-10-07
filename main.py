@@ -1,4 +1,5 @@
 import asyncio
+import os
 import sys
 import time
 from contextlib import asynccontextmanager, suppress
@@ -7,7 +8,7 @@ from pathlib import Path
 import uvicorn
 from dotenv import load_dotenv
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse, Response
 
 from modules.llm_handler import get_llm_response, print_llm_startup_status
 
@@ -19,6 +20,7 @@ if sys.platform == "win32" and hasattr(asyncio, "WindowsSelectorEventLoopPolicy"
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 BASE_DIR = Path(__file__).resolve().parent
+APP_VERSION = "0.5.0"
 
 
 @asynccontextmanager
@@ -27,12 +29,23 @@ async def lifespan(_app: FastAPI):
     yield
 
 
-app = FastAPI(title="VE Interview Copilot", lifespan=lifespan)
+app = FastAPI(title="VE Interview Copilot", version=APP_VERSION, lifespan=lifespan)
 
 
 @app.get("/")
 async def get() -> HTMLResponse:
     return HTMLResponse((BASE_DIR / "index.html").read_text(encoding="utf-8"))
+
+
+@app.head("/")
+async def head_root() -> Response:
+    # Render may probe the root route with HEAD during deployment/health checks.
+    return Response(status_code=200)
+
+
+@app.get("/health")
+async def health() -> JSONResponse:
+    return JSONResponse({"status": "ok", "version": APP_VERSION})
 
 
 @app.websocket("/ws")
@@ -160,4 +173,7 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
 
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="127.0.0.1", port=8000)
+    # Local development still uses port 8000. Render provides PORT (normally
+    # 10000) and requires the server to listen on 0.0.0.0.
+    port = int(os.getenv("PORT", "8000"))
+    uvicorn.run(app, host="0.0.0.0", port=port)

@@ -129,6 +129,28 @@
         }
         .connection-pill.offline .connection-dot { background: var(--danger); }
 
+        .topbar-right {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex: 0 0 auto;
+        }
+        .version-badge {
+            display: inline-flex;
+            align-items: center;
+            min-height: 30px;
+            padding: 0 10px;
+            border: 1px solid rgba(107,168,255,.16);
+            border-radius: 999px;
+            color: #9cbce9;
+            background: rgba(107,168,255,.055);
+            font-size: 9px;
+            font-weight: 850;
+            letter-spacing: .055em;
+            white-space: nowrap;
+            font-variant-numeric: tabular-nums;
+        }
+
         .main-layout {
             min-height: 0;
             display: grid;
@@ -558,9 +580,12 @@
                 </div>
             </div>
 
-            <div id="connectionPill" class="connection-pill offline">
-                <span class="connection-dot"></span>
-                <span id="connectionText">Connecting…</span>
+            <div class="topbar-right">
+                <div class="version-badge" title="Helping Bot build version">v1.1.0</div>
+                <div id="connectionPill" class="connection-pill offline">
+                    <span class="connection-dot"></span>
+                    <span id="connectionText">Connecting…</span>
+                </div>
             </div>
         </header>
 
@@ -593,13 +618,13 @@
                             <span class="mode-dot"></span><span>Both</span>
                         </button>
                     </div>
-                    <div id="sourceNote" class="source-note">Client Audio: choose the meeting tab/window/screen and make sure audio sharing is enabled.</div>
+                    <div id="sourceNote" class="source-note">Client Audio: for Teams, share Entire Screen and enable system audio. Client speech is automatically cleaned and level-balanced before transcription.</div>
 
                     <div id="liveStrip" class="live-strip">
                         <div id="voiceOrb" class="voice-orb"></div>
                         <div class="level-panel" aria-label="Live microphone loudness">
                             <div class="level-head">
-                                <span id="meterSourceLabel">Client audio activity</span>
+                                <span id="meterSourceLabel">Processed client audio</span>
                                 <span id="meterLevel" class="level-value">0%</span>
                             </div>
                             <div class="bars" aria-hidden="true">
@@ -694,7 +719,9 @@
         let activeRecognitionTrack = null;
         let micStream = null;
         let displayStream = null;
+        let clientProcessedStream = null;
         let mixedStream = null;
+        let clientAudioContext = null;
         let mixAudioContext = null;
         let meterAudioContext = null;
         let analyser = null;
@@ -713,8 +740,8 @@
                 label: "Client Audio",
                 idle: "Client audio idle",
                 listening: "Listening to client audio",
-                meter: "Client audio activity",
-                note: "Client Audio: choose the meeting tab/window/screen and make sure audio sharing is enabled.",
+                meter: "Processed client audio",
+                note: "Client Audio: for Teams, share Entire Screen and enable system audio. Client speech is automatically cleaned and level-balanced before transcription.",
                 start: "Start Client Audio"
             },
             mic: {
@@ -778,7 +805,7 @@
             meterSourceLabel.textContent = info.meter;
             startBtn.textContent = info.start;
             statusCopy.textContent = mode === "computer"
-                ? "Client Audio is selected. Start Meeting will ask what meeting audio to share."
+                ? "Client Audio is selected. For Teams, share Entire Screen with system audio enabled."
                 : mode === "mic"
                     ? "My Mic is selected for practice or local speech."
                     : "Both is selected. Client audio and microphone will be mixed for transcription.";
@@ -951,8 +978,10 @@
                 liveStrip.classList.add("listening");
                 liveLabel.textContent = MODE_INFO[selectedMode].listening;
                 statusCopy.textContent = selectedMode === "both"
-                    ? "Listening to both sources. Any finalized speech can trigger the assistant in mixed mode."
-                    : `${MODE_INFO[selectedMode].listening}. Voice activity and timing are being measured.`;
+                    ? "Listening to both sources. Client audio is boosted, but mixed mode cannot separate speakers."
+                    : selectedMode === "computer"
+                        ? "Listening to client audio. Speech cleanup and level balancing are active."
+                        : `${MODE_INFO[selectedMode].listening}. Voice activity and timing are being measured.`;
             };
 
             recognition.onresult = (event) => {
@@ -1070,6 +1099,52 @@
             return stream;
         }
 
+        async function buildProcessedClientStream(systemStream) {
+            // Teams/Zoom system audio can arrive quieter than microphone audio.
+            // Normalize the client channel before both the meter and browser STT:
+            // remove low rumble, tame harsh highs, lift quiet speech, then limit peaks.
+            clientAudioContext = new (window.AudioContext || window.webkitAudioContext)();
+            if (clientAudioContext.state === "suspended") await clientAudioContext.resume();
+
+            const source = clientAudioContext.createMediaStreamSource(
+                new MediaStream(systemStream.getAudioTracks())
+            );
+            const highPass = clientAudioContext.createBiquadFilter();
+            highPass.type = "highpass";
+            highPass.frequency.value = 90;
+            highPass.Q.value = 0.65;
+
+            const lowPass = clientAudioContext.createBiquadFilter();
+            lowPass.type = "lowpass";
+            lowPass.frequency.value = 9000;
+            lowPass.Q.value = 0.55;
+
+            const speechBoost = clientAudioContext.createGain();
+            speechBoost.gain.value = 1.55;
+
+            const compressor = clientAudioContext.createDynamicsCompressor();
+            compressor.threshold.value = -34;
+            compressor.knee.value = 22;
+            compressor.ratio.value = 7;
+            compressor.attack.value = 0.006;
+            compressor.release.value = 0.22;
+
+            const destination = clientAudioContext.createMediaStreamDestination();
+            source.connect(highPass);
+            highPass.connect(lowPass);
+            lowPass.connect(speechBoost);
+            speechBoost.connect(compressor);
+            compressor.connect(destination);
+
+            const originalTrack = systemStream.getAudioTracks()[0];
+            if (originalTrack) {
+                const settings = originalTrack.getSettings ? originalTrack.getSettings() : {};
+                console.info("[Client Audio] shared track settings", settings);
+            }
+
+            return destination.stream;
+        }
+
         async function buildMixedStream(systemStream, localMicStream) {
             mixAudioContext = new (window.AudioContext || window.webkitAudioContext)();
             if (mixAudioContext.state === "suspended") await mixAudioContext.resume();
@@ -1077,11 +1152,28 @@
             const destination = mixAudioContext.createMediaStreamDestination();
             const systemSource = mixAudioContext.createMediaStreamSource(new MediaStream(systemStream.getAudioTracks()));
             const micSource = mixAudioContext.createMediaStreamSource(new MediaStream(localMicStream.getAudioTracks()));
+
+            const systemHighPass = mixAudioContext.createBiquadFilter();
+            systemHighPass.type = "highpass";
+            systemHighPass.frequency.value = 90;
+
             const systemGain = mixAudioContext.createGain();
+            systemGain.gain.value = 1.45;
+
+            const systemCompressor = mixAudioContext.createDynamicsCompressor();
+            systemCompressor.threshold.value = -34;
+            systemCompressor.knee.value = 22;
+            systemCompressor.ratio.value = 7;
+            systemCompressor.attack.value = 0.006;
+            systemCompressor.release.value = 0.22;
+
             const micGain = mixAudioContext.createGain();
-            systemGain.gain.value = 1.0;
-            micGain.gain.value = 0.90;
-            systemSource.connect(systemGain).connect(destination);
+            micGain.gain.value = 0.78;
+
+            systemSource.connect(systemHighPass);
+            systemHighPass.connect(systemGain);
+            systemGain.connect(systemCompressor);
+            systemCompressor.connect(destination);
             micSource.connect(micGain).connect(destination);
             return destination.stream;
         }
@@ -1093,7 +1185,10 @@
             }
 
             displayStream = await acquireDisplayAudio();
-            if (selectedMode === "computer") return displayStream;
+            if (selectedMode === "computer") {
+                clientProcessedStream = await buildProcessedClientStream(displayStream);
+                return clientProcessedStream;
+            }
 
             try {
                 micStream = await acquireMicStream();
@@ -1176,7 +1271,7 @@
         }
 
         function stopAudioSources() {
-            const streams = [micStream, displayStream, mixedStream].filter(Boolean);
+            const streams = [micStream, displayStream, clientProcessedStream, mixedStream].filter(Boolean);
             const seen = new Set();
             streams.forEach(stream => stream.getTracks().forEach(track => {
                 if (!seen.has(track.id)) {
@@ -1186,7 +1281,13 @@
             }));
             micStream = null;
             displayStream = null;
+            clientProcessedStream = null;
             mixedStream = null;
+
+            if (clientAudioContext && clientAudioContext.state !== "closed") {
+                clientAudioContext.close().catch(() => {});
+            }
+            clientAudioContext = null;
 
             if (mixAudioContext && mixAudioContext.state !== "closed") {
                 mixAudioContext.close().catch(() => {});
